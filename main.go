@@ -30,7 +30,7 @@ func panicOnError(err error) {
 }
 
 func getDBConn() (*gorm.DB, error) {
-	if err := godotenv.Load(".env.local"); err != nil {
+	if err := godotenv.Load(); err != nil {
 		return nil, err
 	}
 
@@ -180,7 +180,7 @@ func embeddingExists(db *gorm.DB, entryID uuid.UUID) bool {
 	return err == nil
 }
 
-func dump(f *os.File, db *gorm.DB, now time.Time) error {
+func dump(f *os.File, db *gorm.DB, startFromLine int) error {
 	// try with local db first
 	csvReader := csv.NewReader(f)
 	_, err := csvReader.Read()
@@ -191,12 +191,19 @@ func dump(f *os.File, db *gorm.DB, now time.Time) error {
 	var recordCount int
 
 	for {
+		now := time.Now().UTC()
 		record, err := csvReader.Read()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
 			return fmt.Errorf("unable to parse file as CSV %w", err)
+		}
+
+		if recordCount < startFromLine {
+			recordCount++
+			log.Println("skip record ", recordCount+1)
+			continue
 		}
 
 		entryID, err := findEntryByURL(db, record[1])
@@ -230,10 +237,14 @@ func dump(f *os.File, db *gorm.DB, now time.Time) error {
 
 		recordCount++
 
+		fmt.Println("processed record ", recordCount)
+
 		// if recordCount >= 3 {
 		// 	break
 		// }
 	}
+
+	fmt.Println("records added ", recordCount)
 
 	return nil
 }
@@ -254,7 +265,7 @@ func main() {
 	// resp, err := verify(f)
 	// panicOnError(err)
 
-	panicOnError(dump(f, db, time.Now().UTC()))
+	panicOnError(dump(f, db, 33530))
 
 	fmt.Println("processing complete")
 }
